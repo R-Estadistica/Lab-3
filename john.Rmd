@@ -1,0 +1,199 @@
+---
+title: "Taller R Estadistica y Programacion"
+autor: "John Medina"
+Codigo: "2202215424"
+RVersion: "4.3.2 (2023-10-31 ucrt)"
+output: html_notebook
+---
+
+```{r}
+## instalar/llamar las librerias si se necesitan
+  if(!require('pacman')) {
+    install.packages('pacman')
+    library('pacman')
+  }
+  
+  # función import/export: permite leer/escribir archivos desde diferentes formatos. 
+  if(!require('rio')) {
+    install.packages('rio')
+    library('rio')
+  }
+  
+  # funcion skim: describe un conjunto de datos
+  if(!require('data.table')) {
+    install.packages('data.table')
+    library('data.table')
+  }
+  
+  if(!require('tidyverse')) {
+    install.packages('tidyverse')
+    library('tidyverse')
+  }
+  
+  # contiene conjuntos de datos.
+  if(!require('janitor')) {
+    install.packages('janitor')
+    library('janitor')
+  }
+  
+  # renombar variables
+  if(!require('dplyr')) {
+    install.packages('dplyr')
+    library('dplyr')
+  }
+  
+  # renombar variables
+  if(!require('haven')) {
+    install.packages('haven')
+    library('haven')
+  }
+```
+
+## **1. Bucle (35%)**
+
+-   **1.1** **Lista de archivos** `input`
+
+Cree un objeto que almacene el vector de nombres de los archivos dentro de la carpeta `input`. Asegúrese de que cada archivo contenga la ruta con la ubicación de cada archivo.
+
+**Hint:** Para este punto, puede usar la función `list.files()` con el argumento `recursive = T`.
+
+```{r}
+setwd("~/Semestre 2024-1/John R")
+archivos <- list.files("input", full.names = TRUE, recursive = TRUE)
+indices <- grep("Caracterกsticas generales, seguridad social en salud y educaciขn.rds", archivos, invert = TRUE)
+archivos <- archivos[indices]
+
+```
+
+-   **1.2** **Importar archivos:**
+
+Usa el objeto creado en el punto anterior como insumo de una función que permita importar los archivos de `Fuerza de trabajo`, `No ocupados` y `Ocupados` para todos los meses.
+
+**Hint:** Para este punto, puedes crear una función que importe un archivo y combinarla con la función `lapply`. O puedes crear un bucle y almacenar los dataframes en un objeto tipo lista.
+
+```{r}
+importar_archivo <- function(ruta_archivo) {
+    # Código para importar y procesar el archivo
+    datos <- readRDS(ruta_archivo)
+    # Procesamiento adicional si es necesario
+    return(datos)
+  }
+
+lista_dataframes <- lapply(archivos, importar_archivo)
+```
+
+-   **1.3 Combinar conjuntos de datos**
+
+Combina todos los `data.frame` que importaste en el punto anterior tres `data.frame`.
+
+**Hint:** Para este punto, puede usar la función `rbindlist` de la librería `data.table`.
+
+```{r}
+
+lista_trabajo =list()
+lista_No_ocupados = list()
+lista_ocupados = list()
+contador = 1
+
+for (i in lista_dataframes){
+  if (contador == 1){
+    lista_trabajo <- c(lista_trabajo, list(i))
+  }
+  if (contador == 2){
+    lista_No_ocupados<- c(lista_No_ocupados, list(i))
+  }
+  if (contador == 3){
+    lista_ocupados<- c(lista_ocupados, list(i))
+  }
+  
+  contador = contador +1
+  
+  if(contador == 4){
+    contador = 1}
+  }
+
+
+## Combinar los data frames 
+lista_trabajo<- rbindlist(lista_trabajo)
+lista_No_ocupados<- rbindlist(lista_No_ocupados, fill = TRUE)
+lista_ocupados<- rbindlist(lista_ocupados)
+
+# Mostrar el resultado de la combinación
+lista_trabajo
+lista_No_ocupados
+lista_ocupados
+```
+
+## **2. Preparación (35%)**
+
+-   **2.1 Creación d bases de datos**
+
+Cree tres bases de datos diferentes:
+
+1.  Usando la base de datos llamada `fuerza de trabajo`, suma el número de individuos que hacen parte de la fuerza laboral (**ft == 1**) y aquellos que hacen parte de la población en edad de trabajar (**pet == 1**) por mes, asegurándote de tener en cuenta el factor de expansión.
+
+```{r}
+# Sumar individuos de la fuerza laboral y población en edad de trabajar por mes
+Suma_trabajo <- lista_trabajo[FT == 1 | PET == 1,  .(fuerza_de_trabajo = sum(.N)), by = MES]
+
+print(Suma_trabajo)
+```
+
+2.  Usando la base de datos llamada `Ocupados`, suma el número de individuos que se encuentren empleados (**ft == 1**) por mes, asegurándote de tener en cuenta el factor de expansión.
+
+```{r}
+# Sumar individuos empleados por mes
+Suma_ocupados <- lista_ocupados[FT == 1,.(ocupados = sum(.N)), by = MES]
+
+print(Suma_ocupados)
+```
+
+3.  Usando la base de datos llamada `No ocupados`, suma el número de individuos desempleados (**dsi == 1**) por mes, asegurándote de tener en cuenta el factor de expansión."
+
+```{r}
+# Filtrar los individuos desempleados (dsi == 1) y aplicar el factor de expansión
+Suma_desempleados <- lista_No_ocupados[DSI == 1,.(desempleados = sum(.N)), by = MES]
+
+print(Suma_desempleados)
+```
+
+-   **2.2 Colapsar datos a nivel mensual**
+
+Unifica todas las bases de datos creadas en el punto anterior en una única base llamada `Output`, que debe contener al menos cinco columnas: `Población en edad de trabajar`, `fuerza laboral`, `ocupados`, `desempleados` y el `mes` correspondiente.
+
+```{r}
+# Sumar los valores correspondientes para cada columna agrupados por mes
+output <- bind_rows(Suma_trabajo, Suma_ocupados, Suma_desempleados) %>%
+  group_by(MES) %>%
+  summarise(
+    Poblacion_en_edad_de_trabajar = fuerza_de_trabajo,
+    fuerza_laboral = fuerza_de_trabajo,
+    ocupados = ocupados,
+    desempleados = desempleados
+  )
+
+# Verificar la tabla de salida
+print(output)
+```
+-   **2.3 Tasas de desempleo y ocupación.**
+
+Divida el número de individuos `desempleados` por la `fuerza laboral` para obtener la tasa de desempleo, y los `ocupados` por la `población en edad` de trabajar para obtener la tasa de ocupación.
+
+```{r}
+setDT(output) # Convierte a data.table si aún no lo es
+
+# Calcula los totales necesarios
+total_desempleados <- sum(output[desempleado == 1, .(total = .N)]$total)
+total_fuerza_laboral <- sum(output[ft == 1, .(total = .N)]$total)
+total_ocupados <- sum(output[ocupado == 1, .(total = .N)]$total)
+total_poblacion_edad_trabajar <- sum(output[pet == 1, .(total = .N)]$total)
+
+# Calcula las tasas
+tasa_desempleo <- (total_desempleados / total_fuerza_laboral) * 100
+tasa_ocupacion <- (total_ocupados / total_poblacion_edad_trabajar) * 100
+
+# Imprime los resultados
+cat("Tasa de Desempleo:", tasa_desempleo, "%\n")
+cat("Tasa de Ocupación:", tasa_ocupacion, "%\n")
+```
+
